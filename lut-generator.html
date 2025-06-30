@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
             background-color: #121212;
@@ -44,10 +44,14 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            margin-top: 10px;
+            margin: 5px 5px 5px 0;
         }
         button:hover {
             background-color: #ff6600;
+        }
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
         }
         .button-icon {
             background-color: #444;
@@ -66,6 +70,27 @@
         .button-icon:hover {
             background-color: #555;
         }
+        .button-icon:disabled {
+            background-color: #333;
+            cursor: not-allowed;
+        }
+        .screenshot-button {
+            background-color: #0d7377;
+            font-size: 18px;
+            padding: 15px 20px;
+        }
+        .screenshot-button:hover {
+            background-color: #14a085;
+        }
+        .zoom-button {
+            background-color: #6a4c93;
+            font-size: 14px;
+            padding: 8px 12px;
+            margin: 2px;
+        }
+        .zoom-button:hover {
+            background-color: #8b5fbf;
+        }
         .color-picker {
             display: flex;
             align-items: center;
@@ -80,13 +105,42 @@
         }
         .preview-item {
             flex: 1;
-            min-width: 300px;
+            min-width: 400px;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            border: 1px solid #444;
+            background-color: #111;
+            overflow: auto;
+            cursor: grab;
+        }
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+        .canvas-container.eyedropper-active {
+            cursor: crosshair;
         }
         canvas {
-            border: 1px solid #444;
-            max-width: 100%;
-            height: auto;
-            background-color: #111;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 4px;
+        }
+        .zoom-info {
+            color: #ccc;
+            font-size: 14px;
+            margin-left: 10px;
         }
         .slider-container {
             margin: 10px 0;
@@ -121,7 +175,7 @@
             box-sizing: border-box;
         }
         .eyedropper-active {
-            cursor: crosshair;
+            cursor: crosshair !important;
         }
         .color-container {
             margin-bottom: 15px;
@@ -144,6 +198,58 @@
             color: #ddd;
             margin-top: 0;
         }
+        .upload-options {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .status-message {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status-success {
+            background-color: #1b4332;
+            color: #d1e7dd;
+            border: 1px solid #52c41a;
+        }
+        .status-error {
+            background-color: #4a1e1e;
+            color: #f8d7da;
+            border: 1px solid #dc3545;
+        }
+        .status-info {
+            background-color: #1e2a4a;
+            color: #cce7ff;
+            border: 1px solid #0ea5e9;
+        }
+        .auto-update-toggle {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .auto-update-toggle input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        .recording-indicator {
+            display: none;
+            color: #ff4444;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .recording-indicator.active {
+            display: inline;
+        }
+        .crop-info {
+            background-color: #2a2a2a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ccc;
+        }
     </style>
 </head>
 <body>
@@ -151,12 +257,24 @@
         <h1>OBS LUT Generator für Farbfilterung</h1>
 
         <div class="upload-section">
-            <label for="imageUpload">Spielscreenshot hochladen:</label>
-            <input type="file" id="imageUpload" accept="image/*">
+            <h3>Bildquelle wählen</h3>
+            <div class="upload-options">
+                <input type="file" id="imageUpload" accept="image/*" style="flex: 1;">
+                <button id="screenshotBtn" class="screenshot-button">📷 Screenshot erstellen</button>
+                <button id="startScreenShareBtn" class="screenshot-button">🖥️ Screen teilen</button>
+                <span class="recording-indicator" id="recordingIndicator">● REC</span>
+            </div>
+            <div id="statusMessage" class="status-message"></div>
         </div>
 
         <div class="color-section">
             <h3>Farbeinstellungen</h3>
+            <div class="auto-update-toggle">
+                <label for="autoUpdateCheckbox">
+                    <input type="checkbox" id="autoUpdateCheckbox" checked>
+                    Automatische Vorschau-Aktualisierung
+                </label>
+            </div>
             <div id="colorsContainer">
                 <!-- Farben werden hier dynamisch hinzugefügt -->
             </div>
@@ -172,19 +290,36 @@
                 </div>
             </div>
             
-            <button id="previewBtn">Vorschau aktualisieren</button>
+            <button id="previewBtn">Vorschau manuell aktualisieren</button>
         </div>
 
         <div class="preview-section">
-            <h3>Vorschau</h3>
+            <h3>Vorschau mit Zoom & Navigation</h3>
+            
+            <div class="zoom-controls">
+                <button id="zoomInBtn" class="zoom-button">🔍+ Hineinzoomen</button>
+                <button id="zoomOutBtn" class="zoom-button">🔍- Herauszoomen</button>
+                <button id="zoomResetBtn" class="zoom-button">↻ Zurücksetzen</button>
+                <button id="zoomFitBtn" class="zoom-button">⊞ Anpassen</button>
+                <span class="zoom-info" id="zoomInfo">Zoom: 100%</span>
+            </div>
+            
+            <div class="crop-info">
+                💡 <strong>Zoom-Tipps:</strong> Zoomen Sie hinein um spezifische UI-Bereiche zu bearbeiten. Ziehen Sie mit der Maus zum Navigieren. Pipette funktioniert auch im gezoomten Modus.
+            </div>
+            
             <div class="preview-container">
                 <div class="preview-item">
                     <label>Original:</label>
-                    <canvas id="originalCanvas"></canvas>
+                    <div class="canvas-container" id="originalContainer">
+                        <canvas id="originalCanvas"></canvas>
+                    </div>
                 </div>
                 <div class="preview-item">
                     <label>Gefiltert (nur ausgewählte Farben):</label>
-                    <canvas id="filteredCanvas"></canvas>
+                    <div class="canvas-container" id="filteredContainer">
+                        <canvas id="filteredCanvas"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -199,6 +334,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const imageUpload = document.getElementById('imageUpload');
+            const screenshotBtn = document.getElementById('screenshotBtn');
+            const startScreenShareBtn = document.getElementById('startScreenShareBtn');
             const colorsContainer = document.getElementById('colorsContainer');
             const addColorBtn = document.getElementById('addColorBtn');
             const brightnessSlider = document.getElementById('brightnessSlider');
@@ -206,14 +343,290 @@
             const generateBtn = document.getElementById('generateBtn');
             const originalCanvas = document.getElementById('originalCanvas');
             const filteredCanvas = document.getElementById('filteredCanvas');
+            const originalContainer = document.getElementById('originalContainer');
+            const filteredContainer = document.getElementById('filteredContainer');
+            const autoUpdateCheckbox = document.getElementById('autoUpdateCheckbox');
+            const statusMessage = document.getElementById('statusMessage');
+            const recordingIndicator = document.getElementById('recordingIndicator');
+            
+            // Zoom controls
+            const zoomInBtn = document.getElementById('zoomInBtn');
+            const zoomOutBtn = document.getElementById('zoomOutBtn');
+            const zoomResetBtn = document.getElementById('zoomResetBtn');
+            const zoomFitBtn = document.getElementById('zoomFitBtn');
+            const zoomInfo = document.getElementById('zoomInfo');
             
             let originalImage = null;
             let colorCounter = 0;
             let eyedropperActive = false;
             let targetColorPicker = null;
+            let screenStream = null;
+            let isScreenSharing = false;
+            
+            // Zoom and pan variables
+            let zoomLevel = 1;
+            let isPanning = false;
+            let panStartX = 0;
+            let panStartY = 0;
+            let containerStartScrollX = 0;
+            let containerStartScrollY = 0;
             
             // Erste Farbe hinzufügen
             addColorControl();
+            
+            // Zoom functionality
+            function updateZoom() {
+                const canvasWidth = originalCanvas.width * zoomLevel;
+                const canvasHeight = originalCanvas.height * zoomLevel;
+                
+                originalCanvas.style.width = canvasWidth + 'px';
+                originalCanvas.style.height = canvasHeight + 'px';
+                filteredCanvas.style.width = canvasWidth + 'px';
+                filteredCanvas.style.height = canvasHeight + 'px';
+                
+                zoomInfo.textContent = `Zoom: ${Math.round(zoomLevel * 100)}%`;
+            }
+            
+            zoomInBtn.addEventListener('click', function() {
+                zoomLevel = Math.min(zoomLevel * 1.5, 10);
+                updateZoom();
+            });
+            
+            zoomOutBtn.addEventListener('click', function() {
+                zoomLevel = Math.max(zoomLevel / 1.5, 0.1);
+                updateZoom();
+            });
+            
+            zoomResetBtn.addEventListener('click', function() {
+                zoomLevel = 1;
+                updateZoom();
+                originalContainer.scrollLeft = 0;
+                originalContainer.scrollTop = 0;
+                filteredContainer.scrollLeft = 0;
+                filteredContainer.scrollTop = 0;
+            });
+            
+            zoomFitBtn.addEventListener('click', function() {
+                if (!originalImage) return;
+                
+                const containerWidth = originalContainer.clientWidth;
+                const containerHeight = originalContainer.clientHeight;
+                const imageWidth = originalCanvas.width;
+                const imageHeight = originalCanvas.height;
+                
+                const scaleX = containerWidth / imageWidth;
+                const scaleY = containerHeight / imageHeight;
+                zoomLevel = Math.min(scaleX, scaleY, 1);
+                
+                updateZoom();
+                originalContainer.scrollLeft = 0;
+                originalContainer.scrollTop = 0;
+                filteredContainer.scrollLeft = 0;
+                filteredContainer.scrollTop = 0;
+            });
+            
+            // Mouse wheel zoom
+            function handleWheel(e) {
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                    zoomLevel = Math.max(0.1, Math.min(10, zoomLevel * delta));
+                    updateZoom();
+                }
+            }
+            
+            originalContainer.addEventListener('wheel', handleWheel);
+            filteredContainer.addEventListener('wheel', handleWheel);
+            
+            // Pan functionality
+            function startPan(e, container) {
+                if (eyedropperActive) return;
+                
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                containerStartScrollX = container.scrollLeft;
+                containerStartScrollY = container.scrollTop;
+                container.style.cursor = 'grabbing';
+            }
+            
+            function doPan(e, container) {
+                if (!isPanning || eyedropperActive) return;
+                
+                e.preventDefault();
+                const deltaX = e.clientX - panStartX;
+                const deltaY = e.clientY - panStartY;
+                
+                container.scrollLeft = containerStartScrollX - deltaX;
+                container.scrollTop = containerStartScrollY - deltaY;
+            }
+            
+            function endPan(container) {
+                isPanning = false;
+                container.style.cursor = eyedropperActive ? 'crosshair' : 'grab';
+            }
+            
+            // Pan event listeners for both containers
+            [originalContainer, filteredContainer].forEach(container => {
+                container.addEventListener('mousedown', (e) => startPan(e, container));
+                container.addEventListener('mousemove', (e) => doPan(e, container));
+                container.addEventListener('mouseup', () => endPan(container));
+                container.addEventListener('mouseleave', () => endPan(container));
+            });
+            
+            // Sync scrolling between containers
+            originalContainer.addEventListener('scroll', function() {
+                if (!isPanning) {
+                    filteredContainer.scrollLeft = originalContainer.scrollLeft;
+                    filteredContainer.scrollTop = originalContainer.scrollTop;
+                }
+            });
+            
+            filteredContainer.addEventListener('scroll', function() {
+                if (!isPanning) {
+                    originalContainer.scrollLeft = filteredContainer.scrollLeft;
+                    originalContainer.scrollTop = filteredContainer.scrollTop;
+                }
+            });
+            
+            // Status-Nachricht anzeigen
+            function showStatus(message, type = 'info') {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message status-${type}`;
+                statusMessage.style.display = 'block';
+                
+                // Auto-hide nach 5 Sekunden
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 5000);
+            }
+            
+            // Screenshot-Funktionalität
+            screenshotBtn.addEventListener('click', async function() {
+                try {
+                    showStatus('Screenshot wird erstellt...', 'info');
+                    
+                    // Screen Capture API verwenden
+                    const stream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { mediaSource: 'screen' }
+                    });
+                    
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.play();
+                    
+                    video.onloadedmetadata = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0);
+                        
+                        // Convert to image
+                        canvas.toBlob(blob => {
+                            const img = new Image();
+                            img.onload = function() {
+                                originalImage = img;
+                                drawOriginalImage();
+                                if (autoUpdateCheckbox.checked) {
+                                    updatePreview();
+                                }
+                                showStatus('Screenshot erfolgreich erstellt!', 'success');
+                            };
+                            img.src = URL.createObjectURL(blob);
+                        });
+                        
+                        // Stop the stream
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                } catch (error) {
+                    console.error('Screenshot error:', error);
+                    showStatus('Screenshot fehlgeschlagen. Möglicherweise wurde der Zugriff verweigert.', 'error');
+                }
+            });
+            
+            // Screen-Sharing für kontinuierliche Aufnahme
+            startScreenShareBtn.addEventListener('click', async function() {
+                if (!isScreenSharing) {
+                    try {
+                        showStatus('Screen-Sharing wird gestartet...', 'info');
+                        
+                        screenStream = await navigator.mediaDevices.getDisplayMedia({
+                            video: { mediaSource: 'screen' }
+                        });
+                        
+                        const video = document.createElement('video');
+                        video.srcObject = screenStream;
+                        video.play();
+                        video.muted = true;
+                        
+                        // Kontinuierliche Aufnahme alle 2 Sekunden
+                        const captureInterval = setInterval(() => {
+                            if (!isScreenSharing || !screenStream) {
+                                clearInterval(captureInterval);
+                                return;
+                            }
+                            
+                            const canvas = document.createElement('canvas');
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0);
+                            
+                            canvas.toBlob(blob => {
+                                const img = new Image();
+                                img.onload = function() {
+                                    originalImage = img;
+                                    drawOriginalImage();
+                                    if (autoUpdateCheckbox.checked) {
+                                        updatePreview();
+                                    }
+                                };
+                                img.src = URL.createObjectURL(blob);
+                            });
+                        }, 2000);
+                        
+                        isScreenSharing = true;
+                        startScreenShareBtn.textContent = '⏹️ Screen-Sharing stoppen';
+                        recordingIndicator.classList.add('active');
+                        showStatus('Screen-Sharing aktiv! Vorschau wird alle 2 Sekunden aktualisiert.', 'success');
+                        
+                        // Stream-Ende erkennen
+                        screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+                            stopScreenSharing();
+                        });
+                        
+                    } catch (error) {
+                        console.error('Screen sharing error:', error);
+                        showStatus('Screen-Sharing fehlgeschlagen. Möglicherweise wurde der Zugriff verweigert.', 'error');
+                    }
+                } else {
+                    stopScreenSharing();
+                }
+            });
+            
+            function stopScreenSharing() {
+                if (screenStream) {
+                    screenStream.getTracks().forEach(track => track.stop());
+                    screenStream = null;
+                }
+                isScreenSharing = false;
+                startScreenShareBtn.textContent = '🖥️ Screen teilen';
+                recordingIndicator.classList.remove('active');
+                showStatus('Screen-Sharing beendet.', 'info');
+            }
+            
+            // Auto-Update Toggle
+            autoUpdateCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    showStatus('Automatische Vorschau-Aktualisierung aktiviert.', 'success');
+                    updatePreview();
+                } else {
+                    showStatus('Automatische Vorschau-Aktualisierung deaktiviert.', 'info');
+                }
+            });
             
             // Farb-Control hinzufügen
             addColorBtn.addEventListener('click', function() {
@@ -241,7 +654,9 @@
                     if (colorsContainer.children.length === 0) {
                         addColorControl();
                     }
-                    updatePreview();
+                    if (autoUpdateCheckbox.checked) {
+                        updatePreview();
+                    }
                 };
                 
                 colorHeader.appendChild(colorLabel);
@@ -287,35 +702,50 @@
                 // Event-Listener für Farbauswahl
                 const colorInput = document.getElementById(colorId);
                 const colorDisplayEl = document.getElementById(`display-${colorId}`);
+                const toleranceInput = document.getElementById(`tolerance-${colorId}`);
                 
                 colorInput.addEventListener('input', function() {
                     colorDisplayEl.style.backgroundColor = colorInput.value;
+                    if (autoUpdateCheckbox.checked) {
+                        updatePreview();
+                    }
+                });
+                
+                toleranceInput.addEventListener('input', function() {
+                    if (autoUpdateCheckbox.checked) {
+                        updatePreview();
+                    }
                 });
                 
                 // Event-Listener für Pipette
                 const eyedropperBtn = colorContainer.querySelector('.eyedropper');
                 eyedropperBtn.addEventListener('click', function() {
                     if (!originalImage) {
-                        alert('Bitte laden Sie zuerst ein Bild hoch!');
+                        showStatus('Bitte laden Sie zuerst ein Bild hoch oder erstellen Sie einen Screenshot!', 'error');
                         return;
                     }
                     
                     eyedropperActive = true;
                     targetColorPicker = colorId;
-                    originalCanvas.classList.add('eyedropper-active');
+                    originalContainer.classList.add('eyedropper-active');
+                    filteredContainer.classList.add('eyedropper-active');
+                    showStatus('Klicken Sie auf eine Farbe im Original-Bild...', 'info');
                 });
             }
             
-            // Pipetten-Funktionalität
+            // Pipetten-Funktionalität mit Zoom-Support
             originalCanvas.addEventListener('click', function(e) {
                 if (!eyedropperActive || !originalImage) return;
                 
                 const rect = originalCanvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const containerRect = originalContainer.getBoundingClientRect();
+                
+                // Berechne die tatsächlichen Koordinaten unter Berücksichtigung von Zoom und Scroll
+                const canvasX = (e.clientX - containerRect.left + originalContainer.scrollLeft) / zoomLevel;
+                const canvasY = (e.clientY - containerRect.top + originalContainer.scrollTop) / zoomLevel;
                 
                 const ctx = originalCanvas.getContext('2d');
-                const pixel = ctx.getImageData(x, y, 1, 1).data;
+                const pixel = ctx.getImageData(canvasX, canvasY, 1, 1).data;
                 
                 const hexColor = rgbToHex(pixel[0], pixel[1], pixel[2]);
                 
@@ -329,7 +759,14 @@
                 // Deaktiviere Pipette
                 eyedropperActive = false;
                 targetColorPicker = null;
-                originalCanvas.classList.remove('eyedropper-active');
+                originalContainer.classList.remove('eyedropper-active');
+                filteredContainer.classList.remove('eyedropper-active');
+                
+                showStatus(`Farbe ${hexColor} ausgewählt!`, 'success');
+                
+                if (autoUpdateCheckbox.checked) {
+                    updatePreview();
+                }
             });
             
             // Handle image upload
@@ -342,11 +779,21 @@
                         img.onload = function() {
                             originalImage = img;
                             drawOriginalImage();
-                            updatePreview();
+                            if (autoUpdateCheckbox.checked) {
+                                updatePreview();
+                            }
+                            showStatus('Bild erfolgreich hochgeladen!', 'success');
                         };
                         img.src = event.target.result;
                     };
                     reader.readAsDataURL(file);
+                }
+            });
+            
+            // Brightness slider auto-update
+            brightnessSlider.addEventListener('input', function() {
+                if (autoUpdateCheckbox.checked) {
+                    updatePreview();
                 }
             });
             
@@ -355,7 +802,7 @@
                 if (!originalImage) return;
                 
                 // Set canvas size to match image
-                const maxWidth = 450;
+                const maxWidth = 800;
                 const scale = Math.min(1, maxWidth / originalImage.width);
                 originalCanvas.width = originalImage.width * scale;
                 originalCanvas.height = originalImage.height * scale;
@@ -365,6 +812,9 @@
                 // Draw original image
                 const ctxOriginal = originalCanvas.getContext('2d');
                 ctxOriginal.drawImage(originalImage, 0, 0, originalCanvas.width, originalCanvas.height);
+                
+                // Update zoom display
+                updateZoom();
             }
             
             // Update preview when button is clicked
@@ -440,9 +890,11 @@
             // Generate and download LUT file
             generateBtn.addEventListener('click', function() {
                 if (!originalImage) {
-                    alert('Bitte laden Sie zuerst ein Bild hoch!');
+                    showStatus('Bitte laden Sie zuerst ein Bild hoch oder erstellen Sie einen Screenshot!', 'error');
                     return;
                 }
+                
+                showStatus('LUT-Datei wird generiert...', 'info');
                 
                 // Sammle alle Farbeinstellungen
                 const colors = [];
@@ -531,6 +983,8 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+                
+                showStatus('LUT-Datei erfolgreich heruntergeladen!', 'success');
             });
             
             // Helper function: Convert hex color to RGB
@@ -557,6 +1011,13 @@
                 
                 return Math.sqrt(rDiff*rDiff + gDiff*gDiff + bDiff*bDiff) / Math.sqrt(3);
             }
+            
+            // Cleanup beim Schließen der Seite
+            window.addEventListener('beforeunload', function() {
+                if (screenStream) {
+                    screenStream.getTracks().forEach(track => track.stop());
+                }
+            });
         });
     </script>
 </body>
